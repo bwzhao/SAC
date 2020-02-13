@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iostream>
 #include <armadillo>
+#include "Class_Spectral_Measurement.h"
 
 namespace AC{
     class Class_Calculate {
@@ -44,6 +45,7 @@ namespace AC{
         arma::Col<AC::Type_ValReal> Array_G_tilde;
         // Current value of chi2
         Type_ValReal Val_chi2;
+        Type_ValReal Val_min_chi2;
 
         // Model Parameters
         Type_ValReal Val_Beta;
@@ -53,20 +55,42 @@ namespace AC{
         // Sampling temperature
         Type_ValReal Val_Theta;
 
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Parameters for Measurement
+        int Num_Bins;
+        Class_Spectral_Measurement<AC::Type_ValReal> Array_Spectral;
+        std::string Str_Output;
 
 
     public:
         Class_Calculate() = default;
         ~Class_Calculate() = default;
         explicit Class_Calculate(Type_ValReal _Min_Omega, Type_ValReal _Max_Omega, int _Num_DivideOmega,
-                                 int _Num_DeltaFunc,
-                                 std::string _file_G, std::string _file_Cov, Type_ValReal _Val_Beta);
+                                 int _Num_DeltaFunc, std::string _file_G, std::string _file_Cov,
+                                 std::string _file_Output, int _Num_Bins, Type_ValReal _Val_Beta);
 
+        // Kernel Function
         Type_ValReal Func_Kernel(Type_ValReal _Val_Tau, Type_ValReal _Val_Omega);
 
-        AC::Type_ValReal Cal_chi2(const arma::Col<AC::Type_ValReal> &_Array_G_tilde);
+        // Calculate chi2 based on current G_tilde
+        Type_ValReal Cal_chi2(const arma::Col<AC::Type_ValReal> &_Array_G_tilde);
 
-        void Update_One();
+        // Update process
+        // Just move one delta function at a time
+        bool Update_One();
+
+        // Equilibrium
+        void Equilibrium(int _Num_Steps, int _Num_Bins);
+
+        // Measure chi2
+        Type_ValReal Measure_chi2(int _Num_Steps);
+
+        // Annealing theta to get the optimal value
+        void Anneal_Theta();
+
+        // Measure specture
+        void Measure_Spectral();
+        void WriteBin_Spectral();
     };
 }
 

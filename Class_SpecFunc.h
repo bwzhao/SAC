@@ -31,13 +31,22 @@ namespace AC{
             return Num_DeltaFunc;
         }
 
-
-        void Cal_GTilde(arma::Col<AC::Type_ValReal> &_Array_GTilde, const arma::Mat<AC::Type_ValReal> &_Mat_Kernel,
-                        const arma::Col<AC::Type_ValReal> &_Array_G);
+        void Cal_G_tilde(arma::Col<AC::Type_ValReal> &_Array_GTilde, const arma::Mat<AC::Type_ValReal> &_Mat_Kernel,
+                         const arma::Col<AC::Type_ValReal> &_Array_G);
 
         void UpdateOne(const std::tuple<int, int> & _tuple_Data);
 
         std::tuple<int, int, int, AC::Type_ValReal> Get_RandomPos();
+
+        void Change_OmegaStep(Type_ValReal _ratio){
+            Val_OmegaStep *= _ratio;
+        }
+
+        int Get_Num_DeltaFunc(){
+            return Num_DeltaFunc;
+        }
+
+        void Measure_Spectral(Type_Spectral &_array_Spectral, int _Num_DivideOmega);
 
     };
 }
