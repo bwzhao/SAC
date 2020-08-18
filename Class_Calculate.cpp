@@ -4,21 +4,21 @@
 
 #include "Class_Calculate.h"
 
-AC::Class_Calculate::Class_Calculate(Type_ValReal _Min_Omega, Type_ValReal _Max_Omega, int _Num_DivideOmega,
+AC::Class_Calculate::Class_Calculate(Type_ValReal _Min_Omega, Type_ValReal _Max_Omega, int _Num_OmegaGrid,
                                      int _Num_DeltaFunc, std::string _file_G, std::string _file_Cov,
-                                     std::string _file_Output, int _Num_Bins, Type_ValReal _Val_Beta)
+                                     std::string _file_Output, int _Num_SpectralBins, Type_ValReal _Val_Beta)
         :
-        SpecFunc(_Num_DeltaFunc, _Num_DivideOmega),
+        SpecFunc(_Num_DeltaFunc, _Num_OmegaGrid),
         Val_Beta(_Val_Beta),
         Val_Theta(START_THETA),
-        Grid_Omega(_Num_DivideOmega + 1),
-        Num_Bins(_Num_Bins),
+        Grid_Omega(_Num_OmegaGrid + 1),
+        Num_SpectralBins(_Num_SpectralBins),
         Str_Output(_file_Output)
         {
     // Initialize grid_Omega
-    Type_ValReal Delta_Omega = (_Max_Omega - _Min_Omega) / _Num_DivideOmega;
-    for (int index_Omega = 0; index_Omega != _Num_DivideOmega + 1; ++index_Omega) {
-        Grid_Omega(index_Omega) = (_Min_Omega + index_Omega * Delta_Omega);
+    Type_ValReal GridLength_Omega = (_Max_Omega - _Min_Omega) / _Num_OmegaGrid;
+    for (int index_Omega = 0; index_Omega != _Num_OmegaGrid + 1; ++index_Omega) {
+        Grid_Omega(index_Omega) = (_Min_Omega + index_Omega * GridLength_Omega);
     }
 
 
@@ -36,12 +36,17 @@ AC::Class_Calculate::Class_Calculate(Type_ValReal _Min_Omega, Type_ValReal _Max_
     while (file_G.peek() != EOF) {
         Type_ValReal temp_tau = 0.;
         Type_ValReal temp_G = 0.;
+        Type_ValReal temp_Gerr = 0.;
 
         file_G >> temp_tau;
         if (file_G.peek() == EOF){
             break;
         }
         file_G >> temp_G;
+        if (file_G.peek() == EOF){
+            break;
+        }
+        file_G >> temp_Gerr;
         if (file_G.peek() == EOF){
             break;
         }
@@ -95,13 +100,11 @@ AC::Class_Calculate::Class_Calculate(Type_ValReal _Min_Omega, Type_ValReal _Max_
     // Current chi2 and current minimum chi2
     Val_chi2 = Cal_chi2(Array_G_tilde);
     Val_min_chi2 = Val_chi2;
-
-    // For debug
 }
 
 AC::Type_ValReal AC::Class_Calculate::Func_Kernel(Type_ValReal _Val_Tau, Type_ValReal _Val_Omega){
-//    return 1./Val_PI * std::exp(- _Val_Tau * _Val_Omega) / (1 + std::exp(Val_Beta * _Val_Omega));
-    return 1./Val_PI * (std::exp(- _Val_Tau * _Val_Omega) + std::exp(- (Val_Beta - _Val_Tau) * _Val_Omega)) / (1 + std::exp(- Val_Beta * _Val_Omega));
+    return std::exp(- _Val_Tau * _Val_Omega);
+//    return 1./Val_PI * (std::exp(- _Val_Tau * _Val_Omega) + std::exp(- (Val_Beta - _Val_Tau) * _Val_Omega)) / (1 + std::exp(- Val_Beta * _Val_Omega));
 }
 
 AC::Type_ValReal AC::Class_Calculate::Cal_chi2(const arma::Col<AC::Type_ValReal> &_Array_G_tilde) {
@@ -110,40 +113,34 @@ AC::Type_ValReal AC::Class_Calculate::Cal_chi2(const arma::Col<AC::Type_ValReal>
     return temp_chi2;
 }
 
-bool AC::Class_Calculate::Update_One() {
+bool AC::Class_Calculate::Update_DeltaFunc(int _Num_DeltaFunc) {
     static std::mt19937_64 engine(static_cast<unsigned>(std::time(nullptr)));
     static std::uniform_real_distribution<AC::Type_ValReal> Ran_Double(0., 1.);
 
-    auto tuple_PosAmp = SpecFunc.Get_RandomPos();
-    auto index = std::get<0>(tuple_PosAmp);
-    auto pos_old = std::get<1>(tuple_PosAmp);
-    auto pos_new = std::get<2>(tuple_PosAmp);
-    auto amp = std::get<3>(tuple_PosAmp);
-
-    if ((pos_new < 0) || (pos_new > Grid_Omega.size())){
-        return false;
-    }
-
-//    while (true) {
-//        if ((pos_new > 0) && (pos_new < Grid_Omega.size())){
-//            break;
-//        }
-//        tuple_PosAmp = SpecFunc.Get_RandomPos();
-//        index = std::get<0>(tuple_PosAmp);
-//        pos_old = std::get<1>(tuple_PosAmp);
-//        pos_new = std::get<2>(tuple_PosAmp);
-//        amp = std::get<3>(tuple_PosAmp);
-//    }
-
     auto temp_Array_G_tilde = Array_G_tilde;
-    for (int index_Tau = 0; index_Tau != temp_Array_G_tilde.size(); ++index_Tau) {
-        temp_Array_G_tilde(index_Tau) += (Mat_Kernel(index_Tau, pos_new) - Mat_Kernel(index_Tau, pos_old)) * amp;
+    std::vector<AC::Type_UpdateInfo> temp_array_info;
+
+    for (int index_DeltaFunc = 0; index_DeltaFunc != _Num_DeltaFunc; ++index_DeltaFunc) {
+        auto tuple_PosAmp = SpecFunc.Get_RandomPos();
+        auto index = std::get<0>(tuple_PosAmp);
+        auto pos_old = std::get<1>(tuple_PosAmp);
+        auto pos_new = std::get<2>(tuple_PosAmp);
+        auto amp = std::get<3>(tuple_PosAmp);
+
+        if ((pos_new < 0) || (pos_new >= Grid_Omega.size())){
+            return false;
+        }
+
+        temp_Array_G_tilde += ( Mat_Kernel.col(pos_new) - Mat_Kernel.col(pos_old)) * amp;
+        temp_array_info.emplace_back(tuple_PosAmp);
     }
 
+
+    // Decide if we need to update
     auto temp_chi2 = Cal_chi2(temp_Array_G_tilde);
 
     if (temp_chi2 < Val_chi2) {
-        SpecFunc.UpdateOne(std::make_tuple(index, pos_new));
+        SpecFunc.UpdateOne(temp_array_info);
         Array_G_tilde = temp_Array_G_tilde;
         Val_chi2 = temp_chi2;
 
@@ -158,7 +155,7 @@ bool AC::Class_Calculate::Update_One() {
         auto ratio = std::exp(-(temp_chi2 - Val_chi2) / (2. * Val_Theta));
         // If accepting the change
         if (ratio > Ran_Double(engine)) {
-            SpecFunc.UpdateOne(std::make_tuple(index, pos_new));
+            SpecFunc.UpdateOne(temp_array_info);
             Array_G_tilde = temp_Array_G_tilde;
             Val_chi2 = temp_chi2;
 
@@ -168,16 +165,13 @@ bool AC::Class_Calculate::Update_One() {
             return false;
         }
     }
-
-
-
 }
 
 void AC::Class_Calculate::Equilibrium(int _Num_Steps, int _Num_Bins) {
     for (int index_Bin = 0; index_Bin != _Num_Bins; ++index_Bin) {
         int num_Accept = 0;
         for (int index_Step = 0; index_Step != _Num_Steps; ++index_Step) {
-            if (Update_One()) {
+            if (Update_DeltaFunc(1)) {
                 ++num_Accept;
             }
         }
@@ -195,7 +189,8 @@ void AC::Class_Calculate::Equilibrium(int _Num_Steps, int _Num_Bins) {
 AC::Type_ValReal AC::Class_Calculate::Measure_chi2(int _Num_Steps) {
     Type_ValReal temp_val_chi2 = 0.;
     for (int index_Step = 0; index_Step != _Num_Steps; ++index_Step) {
-        Update_One();
+        Update_DeltaFunc(1);
+        Update_DeltaFunc(2);
         temp_val_chi2 += Val_chi2;
     }
     temp_val_chi2 /= _Num_Steps;
@@ -211,7 +206,7 @@ void AC::Class_Calculate::Anneal_Theta() {
         Type_ValReal current_chi2 = Measure_chi2(NUM_MEASURE_ANNEALING);
         Array_AnnealData.emplace_back(current_chi2, Val_Theta, SpecFunc);
 
-        if ((current_chi2 - Val_min_chi2) < THRESHOD_CHI2 * Val_min_chi2){
+        if ((current_chi2 - Val_min_chi2) < THRESHOD_CHI2){
             break;
         }
         std::cout << index_Anneal << "\t" << Val_Theta <<"\t" << current_chi2 / Array_G.size()<< std::endl;
@@ -233,7 +228,7 @@ void AC::Class_Calculate::Anneal_Theta() {
 }
 
 void AC::Class_Calculate::Measure_Spectral() {
-    Type_Spectral temp_Spectral(Num_Bins, arma::fill::zeros);
+    Type_Spectral temp_Spectral(Num_SpectralBins, arma::fill::zeros);
     SpecFunc.Measure_Spectral(temp_Spectral, Grid_Omega.size() - 1);
 
     Array_Spectral.AppendValue(temp_Spectral);
@@ -248,10 +243,19 @@ void AC::Class_Calculate::WriteBin_Spectral() {
 //    outfile.precision(12);
 
     for (int index_Spectral = 0; index_Spectral != ave_Array_Spectral.size() - 1; ++index_Spectral) {
-        outfile << Grid_Omega[static_cast<int>((index_Spectral + 0.5)* Grid_Omega.size() / Num_Bins)] << "\t"
-                << ave_Array_Spectral[index_Spectral] / (Grid_Omega[static_cast<int>((index_Spectral + 1)* Grid_Omega.size() / Num_Bins)] - Grid_Omega[static_cast<int>((index_Spectral)* Grid_Omega.size() / Num_Bins)]) << std::endl;
+        auto Omega_midpoint = 0.5 * (Grid_Omega[index_Spectral * Grid_Omega.size() / Num_SpectralBins] + Grid_Omega[static_cast<int>((index_Spectral + 1) * Grid_Omega.size() / Num_SpectralBins)]);
+        auto Length_Bin = (Grid_Omega[static_cast<int>((index_Spectral + 1) * Grid_Omega.size() / Num_SpectralBins)] - Grid_Omega[static_cast<int>((index_Spectral) * Grid_Omega.size() / Num_SpectralBins)]);
+
+        outfile << Omega_midpoint << "\t"
+                << ave_Array_Spectral[index_Spectral] / Length_Bin << std::endl;
     }
     outfile.close();
 
     Array_Spectral.ClearValue();
+}
+
+void AC::Class_Calculate::CleanBin_Spectral() {
+    std::ofstream outfile;
+    outfile.open(Str_Output, std::ofstream::out);
+    outfile.close();
 }

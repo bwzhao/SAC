@@ -25,7 +25,7 @@ namespace AC{
 
     public:
         Class_SpecFunc() = default;
-        explicit Class_SpecFunc(int _Num_DeltaFunc, int _Num_DivideOmega);
+        explicit Class_SpecFunc(int _Num_DeltaFunc, int _GridLength_Omega);
 
         int size() const{
             return Num_DeltaFunc;
@@ -34,9 +34,9 @@ namespace AC{
         void Cal_G_tilde(arma::Col<AC::Type_ValReal> &_Array_GTilde, const arma::Mat<AC::Type_ValReal> &_Mat_Kernel,
                          const arma::Col<AC::Type_ValReal> &_Array_G);
 
-        void UpdateOne(const std::tuple<int, int> & _tuple_Data);
+        void UpdateOne(const std::vector<AC::Type_UpdateInfo> & _Array_UpdateInfo);
 
-        std::tuple<int, int, int, AC::Type_ValReal> Get_RandomPos();
+        Type_UpdateInfo Get_RandomPos();
 
         void Change_OmegaStep(Type_ValReal _ratio){
             Val_OmegaStep *= _ratio;
@@ -46,7 +46,7 @@ namespace AC{
             return Num_DeltaFunc;
         }
 
-        void Measure_Spectral(Type_Spectral &_array_Spectral, int _Num_DivideOmega);
+        void Measure_Spectral(Type_Spectral &_array_Spectral, int _GridLength_Omega);
 
     };
 }

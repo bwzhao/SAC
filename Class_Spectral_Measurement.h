@@ -31,7 +31,7 @@ namespace AC {
                 Data = _which_value;
             }
             else{
-                Data += _which_value;
+                Data = Data + _which_value;
 //                Data = Data + _which_value;
 //                for (int index_r = 0; index_r != Data.size(); ++index_r) {
 //                    Data[index_r] += _which_value[index_r];

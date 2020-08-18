@@ -57,7 +57,7 @@ namespace AC{
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Parameters for Measurement
-        int Num_Bins;
+        int Num_SpectralBins;
         Class_Spectral_Measurement<AC::Type_ValReal> Array_Spectral;
         std::string Str_Output;
 
@@ -65,9 +65,9 @@ namespace AC{
     public:
         Class_Calculate() = default;
         ~Class_Calculate() = default;
-        explicit Class_Calculate(Type_ValReal _Min_Omega, Type_ValReal _Max_Omega, int _Num_DivideOmega,
+        explicit Class_Calculate(Type_ValReal _Min_Omega, Type_ValReal _Max_Omega, int _Num_OmegaGrid,
                                  int _Num_DeltaFunc, std::string _file_G, std::string _file_Cov,
-                                 std::string _file_Output, int _Num_Bins, Type_ValReal _Val_Beta);
+                                 std::string _file_Output, int _Num_SpectralBins, Type_ValReal _Val_Beta);
 
         // Kernel Function
         Type_ValReal Func_Kernel(Type_ValReal _Val_Tau, Type_ValReal _Val_Omega);
@@ -77,7 +77,7 @@ namespace AC{
 
         // Update process
         // Just move one delta function at a time
-        bool Update_One();
+        bool Update_DeltaFunc(int _Num_DeltaFunc);
 
         // Equilibrium
         void Equilibrium(int _Num_Steps, int _Num_Bins);
@@ -91,6 +91,8 @@ namespace AC{
         // Measure specture
         void Measure_Spectral();
         void WriteBin_Spectral();
+
+        void CleanBin_Spectral();
     };
 }
 

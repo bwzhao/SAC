@@ -34,6 +34,10 @@ int main(int argc, char *argv[]) {
     int Num_MeaBins = std::stoi(para_main[1 + index_StartMeaPara]);
     int Num_UpdateinSweep = std::stoi(para_main[2 + index_StartMeaPara]);
 
+    int index_WeightLeading = 13;
+    double WeightLeading = std::stod(para_main[0 + index_WeightLeading]);
+
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Start calculation
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -42,12 +46,14 @@ int main(int argc, char *argv[]) {
                                           Val_Beta);
 
     LittleLion.Anneal_Theta();
+    LittleLion.CleanBin_Spectral();
 
     for (int index_Bins = 0; index_Bins != Num_MeaBins; ++index_Bins) {
         std::cout << index_Bins << std::endl;
         for (int index_Measure = 0; index_Measure != Num_Sweeps; ++index_Measure) {
             for (int index_UpdateinSweep = 0; index_UpdateinSweep != Num_UpdateinSweep; ++index_UpdateinSweep) {
-                LittleLion.Update_One();
+                LittleLion.Update_DeltaFunc(1);
+                LittleLion.Update_DeltaFunc(2);
             }
             LittleLion.Measure_Spectral();
         }
