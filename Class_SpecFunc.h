@@ -21,7 +21,7 @@ namespace AC{
         int Pos_LargeDelta;
 
         // Store the amplitude of the delta function
-        Type_ValReal Array_SmallAmp;
+        Type_ValReal Val_SmallAmp;
         Type_ValReal Val_LargeAmp;
 
         // Update step for small delta-fcn
