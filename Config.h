@@ -40,8 +40,13 @@ namespace AC{
     // 0: val_theta
     // 1: val_SpecFunc
     class Class_SpecFunc;
-    using Type_AnnealData = std::tuple<Type_ValReal, Type_ValReal, AC::Class_SpecFunc>;
-    using Type_UpdateInfo = std::tuple<int, int, int, AC::Type_ValReal>;
+    using Type_AnnealData = std::tuple<Type_ValReal, Type_ValReal>;
+
+    // Info (index, pos_old, pos_new
+    using Type_UpdateInfo_Small = std::tuple<int, int, int>;
+
+    // Info (pos_old, pos_new)
+    using Type_UpdateInfo_Large = std::tuple<int, int>;
 
     using Type_Spectral = arma::Col<AC::Type_ValReal>;
 }

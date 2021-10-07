@@ -2,6 +2,8 @@
 #include <vector>
 #include "Config.h"
 #include "Class_Calculate.h"
+#include <sstream>
+#include <iomanip>
 
 int main(int argc, char *argv[]) {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -15,50 +17,83 @@ int main(int argc, char *argv[]) {
     }
     int index_StartPara = 1;
 
+    // bound for the omegas
     AC::Type_ValReal Min_Omega = std::stod(para_main[0 + index_StartPara]);
     AC::Type_ValReal Max_Omega = std::stod(para_main[1 + index_StartPara]);
+
+    // Number of the grid
     int Num_DivideOmega = std::stoi(para_main[2 + index_StartPara]);
+
+    // Number of the delta functions
     int Num_DeltaFunc = std::stoi(para_main[3 + index_StartPara]);
-    int Num_Bins = std::stoi(para_main[4 + index_StartPara]);
 
+    // Number of grid in the measurement process
+    int Num_GridBins = std::stoi(para_main[4 + index_StartPara]);
+
+    // Where the files locates
     int index_StartFile = 6;
-    std::string file_val = para_main[index_StartFile + 0];
-    std::string file_cov = para_main[index_StartFile + 1];
-    std::string file_output = para_main[index_StartFile + 2];
+    auto str_dirInput = std::string("/Users/bowen/Dropbox/SandvikGroup/Projects/Current/Project_tJDynamics/DataAnalysis/2ndData/");
+    auto str_dirOutput = std::string("/Users/bowen/Dropbox/SandvikGroup/Projects/Current/Project_tJDynamics/DataAnalysis/SpectralData/");
+    double val_g = std::stod(para_main[index_StartFile + 0]);
+    double val_h = std::stod(para_main[index_StartFile + 1]);
+    int val_x = std::stoi(para_main[index_StartFile + 2]);
+    int val_y = val_x;
+    int val_q = std::stoi(para_main[index_StartFile + 3]);
+    double val_beta = std::stod(para_main[index_StartFile + 4]);
+    double val_delta=0.1;
 
-    int index_StartModelPara = 9;
-    AC::Type_ValReal Val_Beta = std::stod(para_main[0 + index_StartModelPara]);
+    // Weight for the special leading deltq function
+    int index_WeightLeading = 14;
+    double WeightLeading = std::stod(para_main[0 + index_WeightLeading]);
 
-    int index_StartMeaPara = 10;
+    std::stringstream ss_fileName;
+    ss_fileName << "_h" << std::fixed << std::setprecision(6) << val_h;
+    ss_fileName << "_g" << std::fixed << std::setprecision(6) << val_g;
+    ss_fileName << "_x" << val_x;
+    ss_fileName << "_y" << val_y;
+    ss_fileName << "_beta" << std::fixed << std::setprecision(6) << val_beta;
+    ss_fileName << "_q" << val_q;
+    ss_fileName << "_Delta" << std::fixed << std::setprecision(6) << val_delta;
+
+    std::string file_val = str_dirInput + "val" + ss_fileName.str() + ".txt";
+    std::string file_cov = str_dirInput + "cov" + ss_fileName.str() + ".txt";
+
+    ss_fileName << "_Weight" << std::fixed << std::setprecision(6) << WeightLeading;
+    std::string file_output_para = str_dirOutput + "para" + ss_fileName.str() + ".txt";
+    std::string file_output = str_dirOutput + "data" + ss_fileName.str() + ".txt";
+
+    // Parameters for measurement
+    int index_StartMeaPara = 11;
     int Num_Sweeps = std::stoi(para_main[0 + index_StartMeaPara]);
     int Num_MeaBins = std::stoi(para_main[1 + index_StartMeaPara]);
     int Num_UpdateinSweep = std::stoi(para_main[2 + index_StartMeaPara]);
 
-    int index_WeightLeading = 13;
-    double WeightLeading = std::stod(para_main[0 + index_WeightLeading]);
-
-
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Start calculation
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    auto LittleLion = AC::Class_Calculate(Min_Omega, Max_Omega, Num_DivideOmega, Num_DeltaFunc, file_val, file_cov, file_output,
-                                          Num_Bins,
-                                          Val_Beta);
+    auto LittleLion = AC::Class_Calculate(Min_Omega, Max_Omega, Num_DivideOmega,
+                                          Num_DeltaFunc,
+                                          file_val, file_cov, file_output_para, file_output,
+                                          Num_GridBins,
+                                          val_beta, WeightLeading);
 
     LittleLion.Anneal_Theta();
     LittleLion.CleanBin_Spectral();
+    LittleLion.Setup_Measure();
 
     for (int index_Bins = 0; index_Bins != Num_MeaBins; ++index_Bins) {
-        std::cout << index_Bins << std::endl;
         for (int index_Measure = 0; index_Measure != Num_Sweeps; ++index_Measure) {
             for (int index_UpdateinSweep = 0; index_UpdateinSweep != Num_UpdateinSweep; ++index_UpdateinSweep) {
-                LittleLion.Update_DeltaFunc(1);
-                LittleLion.Update_DeltaFunc(2);
+                LittleLion.Update_SmallDeltaFunc(1, LittleLion.specFunc, LittleLion.array_G_tilde);
+                LittleLion.Update_SmallDeltaFunc(2, LittleLion.specFunc, LittleLion.array_G_tilde);
+                LittleLion.Update_LargeDeltaFunc(LittleLion.specFunc, LittleLion.array_G_tilde);
             }
             LittleLion.Measure_Spectral();
         }
-        LittleLion.WriteBin_Spectral();
+        LittleLion.WriteBin_Spectral(index_Bins);
+        LittleLion.Write_Para();
     }
+
 
     return 0;
 }

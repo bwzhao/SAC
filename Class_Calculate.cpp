@@ -4,23 +4,29 @@
 
 #include "Class_Calculate.h"
 
-AC::Class_Calculate::Class_Calculate(Type_ValReal _Min_Omega, Type_ValReal _Max_Omega, int _Num_OmegaGrid,
-                                     int _Num_DeltaFunc, std::string _file_G, std::string _file_Cov,
-                                     std::string _file_Output, int _Num_SpectralBins, Type_ValReal _Val_Beta)
+AC::Class_Calculate::Class_Calculate(Type_ValReal _min_Omega, Type_ValReal _max_Omega, int _num_DivideOmega,
+                                     int _num_DeltaFunc,
+                                     const std::string &_file_G, const std::string &_file_Cov,
+                                     const std::string &_file_Output_para, const std::string &_file_Output,
+                                     int _num_SpectralBins,
+                                     Type_ValReal _val_Beta, Type_ValReal _val_WeightLeading)
         :
-        SpecFunc(_Num_DeltaFunc, _Num_OmegaGrid),
-        Val_Beta(_Val_Beta),
+        specFunc(_num_DeltaFunc, _num_DivideOmega, _val_WeightLeading),
+        specFunc_noLarge(_num_DeltaFunc, _num_DivideOmega, 0.),
+        Grid_Omega(_num_DivideOmega + 1),
+        Val_Beta(_val_Beta),
         Val_Theta(START_THETA),
-        Grid_Omega(_Num_OmegaGrid + 1),
-        Num_SpectralBins(_Num_SpectralBins),
-        Str_Output(_file_Output)
+        Num_SpectralBins(_num_SpectralBins),
+        Str_Output_Para(_file_Output_para),
+        Str_Output(_file_Output),
+        Val_WeightLeading(_val_WeightLeading)
         {
     // Initialize grid_Omega
-    Type_ValReal GridLength_Omega = (_Max_Omega - _Min_Omega) / _Num_OmegaGrid;
-    for (int index_Omega = 0; index_Omega != _Num_OmegaGrid + 1; ++index_Omega) {
-        Grid_Omega(index_Omega) = (_Min_Omega + index_Omega * GridLength_Omega);
-    }
+    Type_ValReal GridLength_Omega = (_max_Omega - _min_Omega) / _num_DivideOmega;
 
+    for (int index_Omega = 0; index_Omega != _num_DivideOmega + 1; ++index_Omega) {
+        Grid_Omega(index_Omega) = (_min_Omega + index_Omega * GridLength_Omega);
+    }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Initialize val_G and Grid_Tau
@@ -95,120 +101,110 @@ AC::Class_Calculate::Class_Calculate(Type_ValReal _Min_Omega, Type_ValReal _Max_
     Array_sig2inv = eigval;
 
     // Initialize G_tilde
-    this->SpecFunc.Cal_G_tilde(Array_G_tilde, Mat_Kernel, Array_G);
+    this->specFunc.Cal_G_tilde(array_G_tilde, Mat_Kernel, Array_G);
+    this->specFunc_noLarge.Cal_G_tilde(array_G_tilde_noLarge, Mat_Kernel, Array_G);
 
     // Current chi2 and current minimum chi2
-    Val_chi2 = Cal_chi2(Array_G_tilde);
+    Val_chi2 = Cal_chi2(array_G_tilde_noLarge);
     Val_min_chi2 = Val_chi2;
 }
 
-AC::Type_ValReal AC::Class_Calculate::Func_Kernel(Type_ValReal _Val_Tau, Type_ValReal _Val_Omega){
-    return std::exp(- _Val_Tau * _Val_Omega);
-//    return 1./Val_PI * (std::exp(- _Val_Tau * _Val_Omega) + std::exp(- (Val_Beta - _Val_Tau) * _Val_Omega)) / (1 + std::exp(- Val_Beta * _Val_Omega));
+AC::Type_ValReal AC::Class_Calculate::Func_Kernel(Type_ValReal _val_Tau, Type_ValReal _val_Omega){
+    return std::exp(- _val_Tau * _val_Omega);
+//    return 1./Val_PI * (std::exp(- _val_Tau * _val_Omega) + std::exp(- (Val_Beta - _val_Tau) * _val_Omega)) / (1 + std::exp(- Val_Beta * _val_Omega));
 }
 
-AC::Type_ValReal AC::Class_Calculate::Cal_chi2(const arma::Col<AC::Type_ValReal> &_Array_G_tilde) {
-    Type_ValReal temp_chi2 = arma::accu(_Array_G_tilde % _Array_G_tilde % Array_sig2inv);
+AC::Type_ValReal AC::Class_Calculate::Cal_chi2(const arma::Col<AC::Type_ValReal> &_array_G_tilde) {
+    Type_ValReal temp_chi2 = arma::accu(_array_G_tilde % _array_G_tilde % Array_sig2inv);
 
     return temp_chi2;
 }
 
-bool AC::Class_Calculate::Update_DeltaFunc(int _Num_DeltaFunc) {
-    static std::mt19937_64 engine(static_cast<unsigned>(std::time(nullptr)));
-    static std::uniform_real_distribution<AC::Type_ValReal> Ran_Double(0., 1.);
-
-    auto temp_Array_G_tilde = Array_G_tilde;
-    std::vector<AC::Type_UpdateInfo> temp_array_info;
-
-    for (int index_DeltaFunc = 0; index_DeltaFunc != _Num_DeltaFunc; ++index_DeltaFunc) {
-        auto tuple_PosAmp = SpecFunc.Get_RandomPos();
-        auto index = std::get<0>(tuple_PosAmp);
-        auto pos_old = std::get<1>(tuple_PosAmp);
-        auto pos_new = std::get<2>(tuple_PosAmp);
-        auto amp = std::get<3>(tuple_PosAmp);
-
-        if ((pos_new < 0) || (pos_new >= Grid_Omega.size())){
-            return false;
-        }
-
-        temp_Array_G_tilde += ( Mat_Kernel.col(pos_new) - Mat_Kernel.col(pos_old)) * amp;
-        temp_array_info.emplace_back(tuple_PosAmp);
-    }
 
 
-    // Decide if we need to update
-    auto temp_chi2 = Cal_chi2(temp_Array_G_tilde);
-
-    if (temp_chi2 < Val_chi2) {
-        SpecFunc.UpdateOne(temp_array_info);
-        Array_G_tilde = temp_Array_G_tilde;
-        Val_chi2 = temp_chi2;
-
-        // Update minimnm chi2
-        if (temp_chi2 < Val_min_chi2) {
-            Val_min_chi2 = temp_chi2;
-        }
-
-        return true;
-    }
-    else{
-        auto ratio = std::exp(-(temp_chi2 - Val_chi2) / (2. * Val_Theta));
-        // If accepting the change
-        if (ratio > Ran_Double(engine)) {
-            SpecFunc.UpdateOne(temp_array_info);
-            Array_G_tilde = temp_Array_G_tilde;
-            Val_chi2 = temp_chi2;
-
-            return true;
-        }
-        else{
-            return false;
-        }
-    }
-}
-
-void AC::Class_Calculate::Equilibrium(int _Num_Steps, int _Num_Bins) {
-    for (int index_Bin = 0; index_Bin != _Num_Bins; ++index_Bin) {
-        int num_Accept = 0;
-        for (int index_Step = 0; index_Step != _Num_Steps; ++index_Step) {
-            if (Update_DeltaFunc(1)) {
-                ++num_Accept;
+void AC::Class_Calculate::Equilibrium(int _num_Steps,
+                                      int _num_Bins,
+                                      Class_SpecFunc & _SpecFunc,
+                                      arma::Col<AC::Type_ValReal> & _array_G_tilde) {
+    for (int index_Bin = 0; index_Bin != _num_Bins; ++index_Bin) {
+        int num_Accept_Small = 0;
+        int num_Accept_Large = 0;
+        for (int index_Step = 0; index_Step != _num_Steps; ++index_Step) {
+            if (Update_SmallDeltaFunc(1, _SpecFunc, _array_G_tilde)) {
+                ++num_Accept_Small;
+            }
+            if (Update_LargeDeltaFunc(_SpecFunc, _array_G_tilde)) {
+                ++num_Accept_Large;
             }
         }
+
         // Change the omega steps
-        double ratio_Accept = static_cast<double>(num_Accept) / _Num_Steps;
-        if (ratio_Accept >= UPPER_ACCEPT) {
-            SpecFunc.Change_OmegaStep(RATIO_STEPCHANGE);
+        double ratio_Accept_Small = static_cast<double>(num_Accept_Small) / _num_Steps;
+        double ratio_Accept_Large = static_cast<double>(num_Accept_Large) / _num_Steps;
+
+        // Change small
+        if (ratio_Accept_Small >= UPPER_ACCEPT) {
+            _SpecFunc.Change_SmallStep(RATIO_STEPCHANGE);
         }
-        else if (ratio_Accept < LOWER_ACCEPT){
-            SpecFunc.Change_OmegaStep(1. / RATIO_STEPCHANGE);
+        else if (ratio_Accept_Small < LOWER_ACCEPT){
+            _SpecFunc.Change_SmallStep(1. / RATIO_STEPCHANGE);
+        }
+        // Change Large
+        if (ratio_Accept_Large >= UPPER_ACCEPT) {
+            _SpecFunc.Change_LargeStep(RATIO_STEPCHANGE);
+        }
+        else if (ratio_Accept_Large < LOWER_ACCEPT){
+            _SpecFunc.Change_LargeStep(1. / RATIO_STEPCHANGE);
         }
     }
 }
 
-AC::Type_ValReal AC::Class_Calculate::Measure_chi2(int _Num_Steps) {
-    Type_ValReal temp_val_chi2 = 0.;
-    for (int index_Step = 0; index_Step != _Num_Steps; ++index_Step) {
-        Update_DeltaFunc(1);
-        Update_DeltaFunc(2);
-        temp_val_chi2 += Val_chi2;
-    }
-    temp_val_chi2 /= _Num_Steps;
 
-    return temp_val_chi2;
+void AC::Class_Calculate::Equilibrium_noLarge(int _num_Steps,
+                                              int _num_Bins,
+                                              Class_SpecFunc & _SpecFunc,
+                                              arma::Col<AC::Type_ValReal> & _array_G_tilde) {
+    for (int index_Bin = 0; index_Bin != _num_Bins; ++index_Bin) {
+        int num_Accept_Small = 0;
+        for (int index_Step = 0; index_Step != _num_Steps; ++index_Step) {
+            if (Update_SmallDeltaFunc(1, _SpecFunc, _array_G_tilde)) {
+                ++num_Accept_Small;
+            }
+        }
+
+        // Change the omega steps
+        double ratio_Accept_Small = static_cast<double>(num_Accept_Small) / _num_Steps;
+
+        // Change small
+        if (ratio_Accept_Small >= UPPER_ACCEPT) {
+            _SpecFunc.Change_SmallStep(RATIO_STEPCHANGE);
+        }
+        else if (ratio_Accept_Small < LOWER_ACCEPT){
+            _SpecFunc.Change_SmallStep(1. / RATIO_STEPCHANGE);
+        }
+    }
 }
+
 
 void AC::Class_Calculate::Anneal_Theta() {
     // Annealing
     std::vector<AC::Type_AnnealData> Array_AnnealData;
     for (int index_Anneal = 0; index_Anneal != MAX_ANNEALING; ++index_Anneal) {
-        Equilibrium(EQ_STEPS, EQ_BINS);
-        Type_ValReal current_chi2 = Measure_chi2(NUM_MEASURE_ANNEALING);
-        Array_AnnealData.emplace_back(current_chi2, Val_Theta, SpecFunc);
+        Equilibrium_noLarge(EQ_STEPS, EQ_BINS, specFunc_noLarge, array_G_tilde_noLarge);
+        Type_ValReal current_chi2 = 0.;
+        for (int index_Step = 0; index_Step != NUM_MEASURE_ANNEALING; ++index_Step) {
+            Update_SmallDeltaFunc(1, specFunc_noLarge, array_G_tilde_noLarge);
+            Update_SmallDeltaFunc(2, specFunc_noLarge, array_G_tilde_noLarge);
+            current_chi2 += Val_chi2;
+        }
+        current_chi2 /= NUM_MEASURE_ANNEALING;
+
+        Array_AnnealData.emplace_back(current_chi2, Val_Theta);
 
         if ((current_chi2 - Val_min_chi2) < THRESHOD_CHI2){
             break;
         }
+
         std::cout << index_Anneal << "\t" << Val_Theta <<"\t" << current_chi2 / Array_G.size()<< std::endl;
 
         Val_Theta /= RATIO_TEMPCHANGE;
@@ -217,11 +213,11 @@ void AC::Class_Calculate::Anneal_Theta() {
     // Get it back
     for (auto ptr_AnnealData = Array_AnnealData.cend(); ptr_AnnealData != Array_AnnealData.cbegin(); --ptr_AnnealData) {
         auto temp_chi2 = std::get<0>(*ptr_AnnealData);
-        if (temp_chi2 > Val_min_chi2 + std::sqrt(2 * Val_min_chi2)){
+//        if (temp_chi2 > Val_min_chi2 + std::sqrt(2 * Val_min_chi2)){
+        if (temp_chi2 > 2 * Val_min_chi2){
             Val_Theta = std::get<1>(*ptr_AnnealData);
-            SpecFunc = std::get<2>(*ptr_AnnealData);
 
-            std::cout <<Val_Theta <<"\t" << temp_chi2 / Array_G.size()<< std::endl;
+            std::cout << Val_Theta <<"\t" << temp_chi2 / Array_G.size()<< std::endl;
             break;
         }
     }
@@ -229,16 +225,35 @@ void AC::Class_Calculate::Anneal_Theta() {
 
 void AC::Class_Calculate::Measure_Spectral() {
     Type_Spectral temp_Spectral(Num_SpectralBins, arma::fill::zeros);
-    SpecFunc.Measure_Spectral(temp_Spectral, Grid_Omega.size() - 1);
+    specFunc.Measure_Spectral(temp_Spectral, Grid_Omega.size() - 1);
 
     Array_Spectral.AppendValue(temp_Spectral);
+    Mea_Chi2.AppendValue(Val_chi2);
 }
 
-void AC::Class_Calculate::WriteBin_Spectral() {
+void AC::Class_Calculate::Write_Para() {
+    auto sum_chi2 = Mea_Chi2.Get_AveValue();
+    Mea_Chi2.ClearValue();
+
+    std::ofstream outfile;
+    outfile.open(Str_Output_Para, std::ofstream::out);
+    outfile << Val_WeightLeading << "\t" << Val_Theta <<"\t" << sum_chi2 / Array_G.size()<< std::endl;
+
+    outfile.close();
+
+}
+
+void AC::Class_Calculate::WriteBin_Spectral(int _index_bin) {
     auto ave_Array_Spectral = Array_Spectral.Get_AveValue();
 
     std::ofstream outfile;
-    outfile.open(Str_Output, std::ofstream::out | std::ofstream::app);
+    if (_index_bin == 0) {
+        outfile.open(Str_Output, std::ofstream::out);
+    }
+    else {
+        outfile.open(Str_Output, std::ofstream::out | std::ofstream::app);
+    }
+
 //    outfile.setf(std::ios::fixed);
 //    outfile.precision(12);
 
@@ -252,10 +267,166 @@ void AC::Class_Calculate::WriteBin_Spectral() {
     outfile.close();
 
     Array_Spectral.ClearValue();
+
+    std::cout << _index_bin << "\t" << Val_chi2 / Array_G.size() << std::endl;
+
 }
 
 void AC::Class_Calculate::CleanBin_Spectral() {
     std::ofstream outfile;
     outfile.open(Str_Output, std::ofstream::out);
     outfile.close();
+}
+
+bool AC::Class_Calculate::Update_SmallDeltaFunc(
+        int _num_UpdateDeltaFunc,
+        Class_SpecFunc & _SpecFunc,
+        arma::Col<AC::Type_ValReal> & _array_G_tilde
+        ) {
+    static std::mt19937_64 engine(static_cast<unsigned>(std::time(nullptr)));
+    static std::uniform_real_distribution<AC::Type_ValReal> Ran_Double(0., 1.);
+
+    auto temp_Array_G_tilde = _array_G_tilde;
+    std::vector<AC::Type_UpdateInfo_Small> temp_array_info;
+
+    // Update small DeltaFunc
+    for (int index_DeltaFunc = 0; index_DeltaFunc != _num_UpdateDeltaFunc + 1; ++index_DeltaFunc) {
+        auto tuple_PosAmp = _SpecFunc.Get_RandomSmallDelta();
+
+        auto pos_old = std::get<1>(tuple_PosAmp);
+        auto pos_new = std::get<2>(tuple_PosAmp);
+        auto amp = _SpecFunc.Get_Val_SmallAmp();
+
+        const auto pos_LargeDelta = _SpecFunc.Get_Pos_LargeDelta();
+
+        if ((pos_new < pos_LargeDelta) || (pos_new >= Grid_Omega.size())){
+            return false;
+        }
+
+        temp_Array_G_tilde += ( Mat_Kernel.col(pos_new) - Mat_Kernel.col(pos_old)) * amp;
+        temp_array_info.emplace_back(tuple_PosAmp);
+    }
+
+
+    // Decide if we need to update
+    auto temp_chi2 = Cal_chi2(temp_Array_G_tilde);
+
+    if (temp_chi2 < Val_chi2) {
+        _SpecFunc.Update_SmallDeltaFunc(temp_array_info);
+        _array_G_tilde = temp_Array_G_tilde;
+        Val_chi2 = temp_chi2;
+
+        // Update minimnm chi2
+        if (temp_chi2 < Val_min_chi2) {
+            Val_min_chi2 = temp_chi2;
+        }
+
+        return true;
+    }
+    else{
+        auto ratio = std::exp(-(temp_chi2 - Val_chi2) / (2. * Val_Theta));
+        // If accepting the change
+        if (ratio > Ran_Double(engine)) {
+            _SpecFunc.Update_SmallDeltaFunc(temp_array_info);
+            _array_G_tilde = temp_Array_G_tilde;
+            Val_chi2 = temp_chi2;
+
+            return true;
+        }
+        else{
+            return false;
+        }
+    }
+}
+
+bool AC::Class_Calculate::Update_LargeDeltaFunc(
+        Class_SpecFunc & _SpecFunc,
+        arma::Col<AC::Type_ValReal> & _array_G_tilde
+        ) {
+    static std::mt19937_64 engine(static_cast<unsigned>(std::time(nullptr)));
+    static std::uniform_real_distribution<AC::Type_ValReal> Ran_Double(0., 1.);
+
+    auto temp_Array_G_tilde = _array_G_tilde;
+    std::vector<AC::Type_UpdateInfo_Small> temp_array_info;
+
+    // Update Large DeltaFunc
+    auto tuple_PosAmp_Large = _SpecFunc.Get_RandomLargePos();
+
+    auto pos_old = std::get<0>(tuple_PosAmp_Large);
+    auto pos_new = std::get<1>(tuple_PosAmp_Large);
+    auto amp_Large = _SpecFunc.Get_Val_LargeAmp();
+
+    const auto LeastPos_SmallDelta = _SpecFunc.Get_LeastPos_SmallDelta();
+    if ((pos_new >= Grid_Omega.size()) || (pos_new < 0)) {
+        return false;
+    }
+
+
+    // Change of lower boundary
+    if (pos_new > LeastPos_SmallDelta) {
+
+        _SpecFunc.Check_Bound(pos_new, temp_array_info, temp_Array_G_tilde);
+        for (const auto &ele: temp_array_info) {
+            temp_Array_G_tilde += ( Mat_Kernel.col(std::get<2>(ele)) - Mat_Kernel.col(std::get<1>(ele))) * _SpecFunc.Get_Val_SmallAmp();
+        }
+
+    }
+    temp_Array_G_tilde += ( Mat_Kernel.col(pos_new) - Mat_Kernel.col(pos_old)) * amp_Large;
+
+    // Decide if we need to update
+    auto temp_chi2 = Cal_chi2(temp_Array_G_tilde);
+
+    if (temp_chi2 < Val_chi2) {
+        if (!temp_array_info.empty()) {
+            _SpecFunc.Update_SmallDeltaFunc(temp_array_info);
+            _SpecFunc.Set_LeastPos_SmallDelta(pos_new);
+        }
+        _SpecFunc.Update_largeDeltaFunc(tuple_PosAmp_Large);
+        _array_G_tilde = temp_Array_G_tilde;
+        Val_chi2 = temp_chi2;
+
+        // Update minimnm chi2
+        if (temp_chi2 < Val_min_chi2) {
+            Val_min_chi2 = temp_chi2;
+        }
+
+        return true;
+    }
+    else{
+        auto ratio = std::exp(-(temp_chi2 - Val_chi2) / (2. * Val_Theta));
+        // If accepting the change
+        if (ratio > Ran_Double(engine)) {
+            if (!temp_array_info.empty()) {
+                _SpecFunc.Update_SmallDeltaFunc(temp_array_info);
+                _SpecFunc.Set_LeastPos_SmallDelta(pos_new);
+            }
+            _SpecFunc.Update_largeDeltaFunc(tuple_PosAmp_Large);
+            _array_G_tilde = temp_Array_G_tilde;
+            Val_chi2 = temp_chi2;
+
+            return true;
+        }
+        else{
+            return false;
+        }
+    }
+}
+
+void AC::Class_Calculate::Setup_Measure() {
+    Val_chi2 = Cal_chi2(array_G_tilde);
+    auto temp_Theta = Val_Theta;
+    Val_Theta = START_THETA;
+
+    while (temp_Theta < Val_Theta) {
+        Equilibrium(EQ_STEPS, EQ_BINS, specFunc, array_G_tilde);
+        for (int index_Step = 0; index_Step != NUM_MEASURE_ANNEALING; ++index_Step) {
+            Update_SmallDeltaFunc(1, specFunc, array_G_tilde);
+            Update_SmallDeltaFunc(2, specFunc, array_G_tilde);
+            Update_LargeDeltaFunc(specFunc, array_G_tilde);
+        }
+        Val_Theta /= RATIO_TEMPCHANGE;
+        std::cout << Val_Theta <<"\t" << Val_chi2 / Array_G.size()<< std::endl;
+
+    }
+
 }

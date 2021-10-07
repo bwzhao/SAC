@@ -12,13 +12,25 @@
 #include "Class_Spectral_Measurement.h"
 
 namespace AC{
+
     class Class_Calculate {
-    private:
+
         // Some constants will used in the calculation
-
+    public:
         // Store the spectral function information
-        Class_SpecFunc SpecFunc;
+        Class_SpecFunc specFunc;
+        Class_SpecFunc specFunc_noLarge;
 
+        // Store the differencce between estimation of G from A(w) and the real value of G
+        // G_Tilde = estimation - G
+        // argument: (index:\tau)
+        arma::Col<AC::Type_ValReal> array_G_tilde;
+        arma::Col<AC::Type_ValReal> array_G_tilde_noLarge;
+
+        // Parameters using the the calculation
+        // Sampling temperature
+        Type_ValReal Val_Theta;
+    private:
         // Store the mappng: grid_omega -> real omega values
         // argument: index_omega
         arma::Col<AC::Type_ValReal> Grid_Omega;
@@ -32,6 +44,7 @@ namespace AC{
         // Store the mapping: grid_tau, grid_tau -> cov G values
         arma::Col<AC::Type_ValReal> Array_G;
         arma::Mat<AC::Type_ValReal> Mat_CovG;
+
         // Inverse sigma
         arma::Col<AC::Type_ValReal> Array_sig2inv;
 
@@ -39,60 +52,74 @@ namespace AC{
         // argument: (index:\tau, index:\omega)
         arma::Mat<AC::Type_ValReal> Mat_Kernel;
 
-        // Store the differencce between estimation of G from A(w) and the real value of G
-        // G_Tilde = estimation - G
-        // argument: (index:\tau)
-        arma::Col<AC::Type_ValReal> Array_G_tilde;
         // Current value of chi2
         Type_ValReal Val_chi2;
+        Type_ValReal Sum_chi2;
         Type_ValReal Val_min_chi2;
 
         // Model Parameters
         Type_ValReal Val_Beta;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Parameters using the the calculation
-        // Sampling temperature
-        Type_ValReal Val_Theta;
+
+
+        Type_ValReal Val_WeightLeading;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Parameters for Measurement
         int Num_SpectralBins;
         Class_Spectral_Measurement<AC::Type_ValReal> Array_Spectral;
+
+        std::string Str_Output_Para;
         std::string Str_Output;
 
+        Class_Data_Measurement<AC::Type_ValReal> Mea_Chi2;
 
     public:
         Class_Calculate() = default;
         ~Class_Calculate() = default;
-        explicit Class_Calculate(Type_ValReal _Min_Omega, Type_ValReal _Max_Omega, int _Num_OmegaGrid,
-                                 int _Num_DeltaFunc, std::string _file_G, std::string _file_Cov,
-                                 std::string _file_Output, int _Num_SpectralBins, Type_ValReal _Val_Beta);
+        explicit Class_Calculate(Type_ValReal _min_Omega, Type_ValReal _max_Omega, int _num_DivideOmega,
+                                 int _num_DeltaFunc,
+                                 const std::string &_file_G, const std::string &_file_Cov,
+                                 const std::string &_file_Output_para, const std::string &_file_Output,
+                                 int _num_SpectralBins,
+                                 Type_ValReal _val_Beta,
+                                 Type_ValReal _val_WeightLeading);
 
         // Kernel Function
-        Type_ValReal Func_Kernel(Type_ValReal _Val_Tau, Type_ValReal _Val_Omega);
+        Type_ValReal Func_Kernel(Type_ValReal _val_Tau, Type_ValReal _val_Omega);
 
         // Calculate chi2 based on current G_tilde
-        Type_ValReal Cal_chi2(const arma::Col<AC::Type_ValReal> &_Array_G_tilde);
+        Type_ValReal Cal_chi2(const arma::Col<AC::Type_ValReal> &_array_G_tilde);
 
         // Update process
         // Just move one delta function at a time
-        bool Update_DeltaFunc(int _Num_DeltaFunc);
+        bool Update_SmallDeltaFunc(int _num_UpdateDeltaFunc,
+                                   Class_SpecFunc & _SpecFunc,
+                                   arma::Col<AC::Type_ValReal> & _array_G_tilde);
+        bool Update_LargeDeltaFunc(Class_SpecFunc & _SpecFunc,
+                                   arma::Col<AC::Type_ValReal> & _array_G_tilde);
 
         // Equilibrium
-        void Equilibrium(int _Num_Steps, int _Num_Bins);
-
-        // Measure chi2
-        Type_ValReal Measure_chi2(int _Num_Steps);
+        void Equilibrium(int _num_Steps, int _num_Bins,
+                         Class_SpecFunc &_SpecFunc,
+                         arma::Col<AC::Type_ValReal> & _array_G_tilde);
+        void Equilibrium_noLarge(int _num_Steps, int _num_Bins,
+                                 Class_SpecFunc &_SpecFunc,
+                                 arma::Col<AC::Type_ValReal> & _array_G_tilde);
 
         // Annealing theta to get the optimal value
         void Anneal_Theta();
 
         // Measure specture
         void Measure_Spectral();
-        void WriteBin_Spectral();
+        void WriteBin_Spectral(int _index_bin);
+
+        void Measure_Para();
+        void Write_Para();
 
         void CleanBin_Spectral();
+        void Setup_Measure();
     };
 }
 

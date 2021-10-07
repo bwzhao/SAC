@@ -54,5 +54,48 @@ namespace AC {
             Length = 0;
         }
     };
+
+    template <typename T>
+    class Class_Data_Measurement {
+    private:
+        T Data;
+        int Length;
+
+    public:
+        Class_Data_Measurement(): Length(0),
+        Data(0){};
+//        Class_Spectral_Measurement(SSE::type_NumSegment _length):
+//                Length(_length) {}
+        ~Class_Data_Measurement() = default;
+
+        // Add a measurement value to a specific quantity(key)
+        void AppendValue(const T &_which_value){
+            if (Length == 0) {
+                Data = _which_value;
+            }
+            else{
+                Data = Data + _which_value;
+//                Data = Data + _which_value;
+//                for (int index_r = 0; index_r != Data.size(); ++index_r) {
+//                    Data[index_r] += _which_value[index_r];
+//                }
+            }
+            ++Length;
+        }
+
+        T Get_AveValue(){
+//            std::vector<T> temp_return_vec(Data);
+//            for (int index_r = 0; index_r != Data.size(); ++index_r) {
+//                temp_return_vec[index_r] /= Length;
+//            }
+//            std::cout << Length << std::endl;
+            return Data / Length;
+        }
+
+        void ClearValue(){
+            Data = 0;
+            Length = 0;
+        }
+    };
 }
 
